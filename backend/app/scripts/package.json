@@ -1,0 +1,10 @@
+{
+  "name": "coderefactor-js-parser",
+  "version": "1.0.0",
+  "description": "AST Parser helper using @babel/parser for JS/TS code analysis",
+  "main": "parse_js.js",
+  "dependencies": {
+    "@babel/parser": "^7.24.0",
+    "@babel/traverse": "^7.24.0"
+  }
+}

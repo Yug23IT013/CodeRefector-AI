@@ -1,0 +1,10 @@
+Definition-CodeRefactor AI 
+Manual code reviews are slow, prone to missing subtle bugs, and lack automated performance benchmarking. Existing linters catch style issues but fail to provide deep context or measure runtime regressions before merging. CodeRefactor AI is proposed as an automated code review platform that intercepts GitHub pull requests, runs static and AI-driven security/optimization reviews, and benchmarks code execution in isolated sandboxes to ensure high code quality. 
+
+Key Features: 
+Intercepts GitHub pull requests automatically via webhooks. 
+Analyzes source code using AST parsing and static rule engines. 
+Identifies security vulnerabilities and anti-patterns with AI-driven refactoring guidance. 
+Posts inline review comments and fix suggestions directly to GitHub PRs. 
+Benchmarks execution time and memory usage in sandboxed Docker containers. 
+Provides a centralized dashboard to track repository health and code quality trends.
