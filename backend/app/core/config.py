@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_SECRET: str = ""
     WEBHOOK_PUBLIC_URL: str = ""  # e.g. Smee or ngrok URL for automated webhook creation
 
+    # RAG (Retrieval-Augmented Generation) Configuration
+    RAG_ENABLED: bool = True
+    CHROMA_PERSIST_PATH: str = "./chroma_db"
+    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+    RAG_TOP_K: int = 3
+    RAG_MIN_SIMILARITY: float = 0.35
+
     @property
     def is_sqlite(self) -> bool:
         return self.DATABASE_URL.startswith("sqlite")

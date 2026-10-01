@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   GitPullRequest,
   ShieldCheck,
+  BrainCircuit,
   Plus,
   LogOut,
   Github,
@@ -31,6 +32,7 @@ export const Navbar: React.FC = () => {
   }, []);
 
   const isDashboardActive = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/repos') || location.pathname.startsWith('/pulls');
+  const isRagActive = location.pathname.startsWith('/rag');
 
   return (
     <>
@@ -57,7 +59,7 @@ export const Navbar: React.FC = () => {
               </div>
             </Link>
 
-            {/* Navigation Links - Only shown when logged in */}
+            {/* Navigation Links - Only available when signed in with GitHub */}
             {user && (
               <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-border-subtle">
                 <Link
@@ -70,6 +72,18 @@ export const Navbar: React.FC = () => {
                 >
                   <GitPullRequest className="w-3.5 h-3.5 text-brand-400" />
                   <span>Repositories</span>
+                </Link>
+
+                <Link
+                  to="/rag"
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5 ${
+                    isRagActive
+                      ? 'bg-surface-2 text-white border border-border-prominent shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-surface-1'
+                  }`}
+                >
+                  <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Knowledge Base (RAG)</span>
                 </Link>
               </nav>
             )}
@@ -133,6 +147,14 @@ export const Navbar: React.FC = () => {
                         >
                           <GitPullRequest className="w-3.5 h-3.5 mr-2.5 text-brand-400" />
                           <span>Tracked Repositories</span>
+                        </Link>
+                        <Link
+                          to="/rag"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-surface-3 transition-colors"
+                        >
+                          <BrainCircuit className="w-3.5 h-3.5 mr-2.5 text-purple-400" />
+                          <span>Knowledge Base (RAG)</span>
                         </Link>
                       </div>
 

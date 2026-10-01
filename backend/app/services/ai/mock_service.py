@@ -13,6 +13,7 @@ class MockReviewService(BaseAIService):
         diff: str,
         static_findings: List[FindingResult],
         file_contents: Optional[dict[str, str]] = None,
+        rag_context: Optional[str] = None,
     ) -> AIReviewResponse:
         total = len(static_findings)
         critical_count = sum(1 for f in static_findings if f.severity == "critical")
@@ -32,6 +33,7 @@ class MockReviewService(BaseAIService):
             f"**PR Assessment:** Reviewed pull request *'{pr_title}'* by @{pr_author}.",
             f"- **Overall Risk Level:** `{risk_level.upper()}`",
             f"- **Total Static Analysis Findings:** `{total}` (Critical: {critical_count}, High: {high_count})",
+            f"- **RAG Knowledge Base:** `{'Active (Retrieved & Grounded)' if rag_context else 'Default'}`",
             "",
             "#### Key Observations:",
         ]

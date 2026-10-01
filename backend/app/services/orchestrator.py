@@ -7,6 +7,9 @@ from app.db.models import PullRequest, Repository, ReviewRun, Finding
 from app.services.analyzer import analyzer_registry, FindingResult
 from app.services.ai import get_ai_service
 from app.services.github_service import github_service
+from app.services.rag.retriever import rag_retriever
+from app.services.rag.indexer import rag_indexer
+from app.services.auto_merge_service import auto_merge_service
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +92,19 @@ class ReviewOrchestrator:
 
             logger.info(f"Static analysis found {len(static_findings)} issues.")
 
-            # 4. Invoke AI Review Layer
+            # 3.5. Retrieve Grounded RAG Context (Knowledge Base & Past Precedents)
+            rag_context = ""
+            try:
+                rag_context = rag_retriever.retrieve_context_for_findings(
+                    findings=static_findings,
+                    repo_id=repo.id,
+                )
+                if rag_context:
+                    logger.info("Successfully retrieved RAG context for review.")
+            except Exception as e:
+                logger.warning(f"RAG retrieval skipped due to error: {e}")
+
+            # 4. Invoke AI Review Layer with RAG context
             ai_service = get_ai_service()
             ai_response = ai_service.generate_review(
                 pr_title=pr.title,
@@ -97,6 +112,7 @@ class ReviewOrchestrator:
                 diff=diff_text,
                 static_findings=static_findings,
                 file_contents=file_contents_map,
+                rag_context=rag_context,
             )
 
             # 5. Persist findings to database
@@ -124,6 +140,13 @@ class ReviewOrchestrator:
                 db_findings.append(finding_rec)
 
             db.commit()
+
+            # 5.5. Index reviewed findings into RAG Vector Store
+            try:
+                indexed_count = rag_indexer.index_review_findings(review_run.id, db=db)
+                logger.info(f"RAG indexed {indexed_count} findings from ReviewRun #{review_run.id}")
+            except Exception as e:
+                logger.warning(f"RAG indexing skipped due to error: {e}")
 
             # 6. Post comments back to GitHub PR
             # Top-level summary
@@ -168,6 +191,17 @@ class ReviewOrchestrator:
             review_run.ai_summary = ai_response.summary
             review_run.completed_at = utc_now()
             db.commit()
+
+            # 8. Evaluate Auto-Merge criteria (Strict zero-tolerance: Critical, High, Med, Low must all be 0)
+            try:
+                merge_outcome = auto_merge_service.evaluate_and_merge(
+                    pr_id=pr.id,
+                    review_run_id=review_run.id,
+                    db=db,
+                )
+                logger.info(f"Auto-merge evaluation for PR #{pr.pr_number}: {merge_outcome.get('action')}")
+            except Exception as e:
+                logger.warning(f"Auto-merge evaluation skipped due to error: {e}")
 
             logger.info(f"Review run #{review_run.id} completed successfully.")
             return review_run.id

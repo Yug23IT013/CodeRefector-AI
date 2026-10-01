@@ -23,7 +23,7 @@ def run_code(user_input):
 
 def test_sec002_hardcoded_secrets(analyzer):
     code = """
-api_key = "ghp_1234567890abcdef12345678"
+api_key = "dummy_mock_secret_value_12345"
 password = "SuperSecretPassword123!"
 """
     findings = analyzer.analyze("test.py", code)

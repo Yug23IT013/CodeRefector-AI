@@ -28,6 +28,8 @@ secrets/
 *.db-journal
 coderefactor.db
 backend/coderefactor.db
+chroma_db/
+backend/chroma_db/
 
 # Python
 __pycache__/

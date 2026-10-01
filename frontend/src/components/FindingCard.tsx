@@ -4,6 +4,7 @@ import { SeverityBadge } from './SeverityBadge';
 import { ChevronDown, ChevronUp, Sparkles, FileCode, Check, Copy } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
+import { RAGInsightBadge } from './RAGInsightBadge';
 
 export interface FindingCardProps {
   finding: Finding;
@@ -43,17 +44,21 @@ export const FindingCard: React.FC<FindingCardProps> = ({ finding }) => {
           </div>
         </div>
 
-        {finding.ai_suggestion && (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setExpanded(!expanded)}
-            icon={<Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
-          >
-            <span>{expanded ? 'Hide Fix' : 'Show AI Fix'}</span>
-            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <RAGInsightBadge ruleId={finding.rule_id} filePath={finding.file_path} />
+
+          {finding.ai_suggestion && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setExpanded(!expanded)}
+              icon={<Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
+            >
+              <span>{expanded ? 'Hide Fix' : 'Show AI Fix'}</span>
+              {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Finding Description */}

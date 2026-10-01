@@ -31,6 +31,7 @@ class BaseAIService(ABC):
         diff: str,
         static_findings: List[FindingResult],
         file_contents: Optional[dict[str, str]] = None,
+        rag_context: Optional[str] = None,
     ) -> AIReviewResponse:
-        """Generate PR review summary and targeted inline fix suggestions."""
+        """Generate PR review summary and targeted inline fix suggestions with optional RAG context."""
         pass

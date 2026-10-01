@@ -44,6 +44,8 @@ class Repository(Base):
     full_name: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     default_branch: Mapped[str] = mapped_column(String(100), default="main")
     user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    auto_merge_default: Mapped[bool] = mapped_column(Boolean, default=True)
+    merge_method: Mapped[str] = mapped_column(String(20), default="squash")  # squash, merge, rebase
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     user: Mapped[Optional["User"]] = relationship("User", back_populates="repositories")
@@ -64,6 +66,10 @@ class PullRequest(Base):
     base_sha: Mapped[str] = mapped_column(String(40), default="")
     status: Mapped[str] = mapped_column(String(50), default="open")  # open, closed, merged
     html_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    auto_merge_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    merged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    merged_by: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    merge_commit_sha: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 

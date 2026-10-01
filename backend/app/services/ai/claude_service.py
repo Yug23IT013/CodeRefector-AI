@@ -25,6 +25,7 @@ class ClaudeReviewService(BaseAIService):
         diff: str,
         static_findings: List[FindingResult],
         file_contents: Optional[dict[str, str]] = None,
+        rag_context: Optional[str] = None,
     ) -> AIReviewResponse:
         if not self.client:
             raise ValueError("Anthropic API key is not configured. Use MockReviewService or set ANTHROPIC_API_KEY.")
@@ -39,11 +40,14 @@ class ClaudeReviewService(BaseAIService):
         # Cap diff size to avoid token overflow
         truncated_diff = diff[:25000] if len(diff) > 25000 else diff
 
+        rag_block = f"\n\n{rag_context}\n" if rag_context else ""
+
         system_prompt = (
             "You are an expert senior software engineer and security auditor conducting an automated code review on a GitHub Pull Request.\n"
             "Your review consists of two parts:\n"
             "1. An Executive Summary evaluating overall PR quality, security risk, and architectural integrity.\n"
-            "2. Actionable Inline Suggestions: For static analysis findings and other critical bugs in the diff, provide concrete replacement code fixes.\n\n"
+            "2. Actionable Inline Suggestions: For static analysis findings and other critical bugs in the diff, provide concrete replacement code fixes.\n"
+            f"{rag_block}\n"
             "Return ONLY a valid JSON object with the following schema:\n"
             "{\n"
             '  "summary": "Markdown text with a concise executive overview and risk assessment.",\n'

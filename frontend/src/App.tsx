@@ -6,6 +6,7 @@ import { LandingPage } from './pages/LandingPage';
 import { RepoListPage } from './pages/RepoListPage';
 import { PRListPage } from './pages/PRListPage';
 import { PRDetailPage } from './pages/PRDetailPage';
+import { RAGQueryPage } from './pages/RAGQueryPage';
 
 const RootRoute: React.FC = () => {
   const { user, loading } = useAuth();
@@ -71,6 +72,14 @@ export const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <PRDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/rag"
+                element={
+                  <ProtectedRoute>
+                    <RAGQueryPage />
                   </ProtectedRoute>
                 }
               />

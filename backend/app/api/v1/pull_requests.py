@@ -3,9 +3,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.db.models import Repository, PullRequest, ReviewRun, Finding
+from app.db.models import Repository, PullRequest, ReviewRun, Finding, User
 from app.core.security import verify_api_token
+from app.core.jwt import get_optional_current_user
 from app.services.orchestrator import review_orchestrator
+from app.services.auto_merge_service import auto_merge_service
 
 router = APIRouter(tags=["Pull Requests"])
 
@@ -17,6 +19,10 @@ class CreatePRPayload(BaseModel):
     head_sha: str
     base_sha: Optional[str] = "main"
     html_url: Optional[str] = None
+
+
+class ForceMergePayload(BaseModel):
+    reason: Optional[str] = None
 
 
 @router.get("/repos/{repo_id}/pulls", dependencies=[Depends(verify_api_token)])
@@ -153,6 +159,11 @@ def get_pull_request(pr_id: int, db: Session = Depends(get_db)) -> Dict[str, Any
         } if latest_review else None,
         "findings": findings_list,
         "total_reviews": len(reviews),
+        "auto_merge_enabled": pr.auto_merge_enabled,
+        "merged_at": pr.merged_at.isoformat() if pr.merged_at else None,
+        "merged_by": pr.merged_by,
+        "merge_commit_sha": pr.merge_commit_sha,
+        "auto_merge_gate": auto_merge_service.get_eligibility_status(pr.id, db),
     }
 
 
@@ -162,10 +173,45 @@ def trigger_re_review(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """Manually re-trigger a review for an existing PR."""
+    """Manually re-trigger a review for an existing PR, automatically fetching latest commits from GitHub."""
+    import os
+    import httpx
+
     pr = db.query(PullRequest).filter(PullRequest.id == pr_id).first()
     if not pr:
         raise HTTPException(status_code=404, detail="Pull request not found")
+
+    repo = pr.repository
+    token = None
+    if repo and repo.user_id:
+        u = db.query(User).filter(User.id == repo.user_id).first()
+        if u and u.github_access_token:
+            token = u.github_access_token
+    if not token and pr.author:
+        u = db.query(User).filter(User.username == pr.author).first()
+        if u and u.github_access_token:
+            token = u.github_access_token
+    token = token or os.getenv("GITHUB_TOKEN")
+
+    if repo and token:
+        try:
+            headers = {
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "CodeRefactor-AI-Reviewer",
+                "Authorization": f"Bearer {token}",
+            }
+            with httpx.Client(timeout=10.0) as client:
+                res = client.get(f"https://api.github.com/repos/{repo.full_name}/pulls/{pr.pr_number}", headers=headers)
+                if res.status_code == 200:
+                    data = res.json()
+                    new_head = data.get("head", {}).get("sha")
+                    if new_head:
+                        pr.head_sha = new_head
+                    if data.get("state"):
+                        pr.status = data.get("state")
+                    db.commit()
+        except Exception:
+            pass
 
     background_tasks.add_task(
         review_orchestrator.process_pr_review,
@@ -175,6 +221,46 @@ def trigger_re_review(
 
     return {
         "status": "queued",
-        "message": f"Re-review scheduled for PR #{pr.pr_number}",
+        "message": f"Re-review scheduled for PR #{pr.pr_number} (commit {pr.head_sha[:7]})",
         "pr_id": pr.id,
+        "commit_sha": pr.head_sha,
     }
+
+
+@router.get("/pulls/{pr_id}/auto-merge", dependencies=[Depends(verify_api_token)])
+def get_auto_merge_status(pr_id: int, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """Get the auto-merge quality gate checklist for a pull request."""
+    pr = db.query(PullRequest).filter(PullRequest.id == pr_id).first()
+    if not pr:
+        raise HTTPException(status_code=404, detail="Pull request not found")
+    return auto_merge_service.get_eligibility_status(pr.id, db)
+
+
+@router.post("/pulls/{pr_id}/auto-merge/toggle", dependencies=[Depends(verify_api_token)])
+def toggle_auto_merge(pr_id: int, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """Toggle auto-merge enabled/disabled state for a PR."""
+    pr = db.query(PullRequest).filter(PullRequest.id == pr_id).first()
+    if not pr:
+        raise HTTPException(status_code=404, detail="Pull request not found")
+    pr.auto_merge_enabled = not pr.auto_merge_enabled
+    db.commit()
+    return {
+        "pr_id": pr.id,
+        "auto_merge_enabled": pr.auto_merge_enabled,
+        "message": f"Auto-merge {'enabled' if pr.auto_merge_enabled else 'disabled'} for PR #{pr.pr_number}"
+    }
+
+
+@router.post("/pulls/{pr_id}/force-merge", dependencies=[Depends(verify_api_token)])
+def force_merge_pr(
+    pr_id: int,
+    payload: Optional[ForceMergePayload] = None,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Force merge a PR, bypassing the 0-findings quality gate."""
+    reason = payload.reason if payload else None
+    result = auto_merge_service.force_merge(pr_id=pr_id, db=db, user=current_user, reason=reason)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Force merge failed"))
+    return result

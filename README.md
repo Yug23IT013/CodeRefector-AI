@@ -25,6 +25,13 @@ An automated code review, static analysis, and sandboxed runtime performance pro
                          │                         │
                          └────────────┬────────────┘
                                       ▼
+                      RAG Vector Knowledge Base
+              [ChromaDB / Lightweight Vector Index]
+              ├─ Authoritative Rule Standards (SEC001-PERF002)
+              ├─ Historical PR Code Precedents & Fixes
+              └─ Semantic Retrieval (all-MiniLM-L6-v2)
+                                      │
+                                      ▼
                           AI Review Layer (Groq Cloud)
                     [Llama 3.3 70B / Llama 3.1 8B Free Tier]
                                       │
@@ -42,7 +49,7 @@ An automated code review, static analysis, and sandboxed runtime performance pro
                                       │
                                       ▼
                           React Dashboard (Vite + TS)
-            (Repo list → PR list → Detailed Findings & Quality Trends)
+            (Repo list → PR list → Detailed Findings & Quality Trends → RAG Knowledge Base)
 ```
 
 ---
@@ -63,8 +70,14 @@ An automated code review, static analysis, and sandboxed runtime performance pro
   - `PERF002`: Unused imports detection.
 - **AST-Based Static Analysis (JS/TS)**:
   - Subprocess parser powered by `@babel/parser` with regex fallbacks for `eval`, `Function()`, `document.write`, and `innerHTML` XSS sinks.
+- **Retrieval-Augmented Generation (RAG) Architecture**:
+  - **Vector Knowledge Base**: Backed by ChromaDB and SentenceTransformer embeddings (`all-MiniLM-L6-v2`) with zero-downtime lightweight cosine similarity fallback.
+  - **Authoritative Rule Standards**: Embedded rule specifications, vulnerability impact assessments, and canonical bad vs. good code fixes.
+  - **Historical Code Precedent Memory**: Automatically indexes resolved review findings and AI suggestions, retrieving prior accepted solutions when recurring patterns are flagged.
+  - **Interactive RAG Explorer**: Dedicated `/rag` dashboard page featuring natural-language semantic query search and interactive rule catalog with code snippet copy.
+  - **In-Context Finding Badges**: Interactive `RAG Insights` drawer directly inside finding cards showing similarity percentages and project precedents.
 - **Groq Free Cloud AI Review Layer**:
-  - Powered by free tier models (`llama-3.3-70b-versatile` or `llama-3.1-8b-instant`) with native structured JSON output.
+  - Powered by free tier models (`llama-3.3-70b-versatile` or `llama-3.1-8b-instant`) with native structured JSON output and RAG grounding.
   - Contextual executive summary highlighting risk ratings (`low`, `medium`, `high`, `critical`).
   - Concrete inline code replacement suggestions for flagged lines.
   - Offline/Mock mode fallback when no API key is set.

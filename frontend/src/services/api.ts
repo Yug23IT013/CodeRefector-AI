@@ -9,6 +9,7 @@ import {
   RepoTrendData,
   BenchmarkRun,
   BenchmarkTrendsData,
+  AutoMergeGateStatus,
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -55,6 +56,12 @@ export const api = {
     return fetchJSON<PullRequestSummary[]>(`/repos/${repoId}/pulls`);
   },
 
+  syncRepositoryPRs(repoId: number): Promise<{ message: string; synced: number }> {
+    return fetchJSON<{ message: string; synced: number }>(`/repos/${repoId}/sync`, {
+      method: 'POST',
+    });
+  },
+
   getPullRequest(prId: number): Promise<PullRequestDetail> {
     return fetchJSON<PullRequestDetail>(`/pulls/${prId}`);
   },
@@ -62,6 +69,30 @@ export const api = {
   triggerReReview(prId: number): Promise<{ status: string; message: string }> {
     return fetchJSON<{ status: string; message: string }>(`/pulls/${prId}/re-review`, {
       method: 'POST',
+    });
+  },
+
+  getAutoMergeStatus(prId: number): Promise<AutoMergeGateStatus> {
+    return fetchJSON<AutoMergeGateStatus>(`/pulls/${prId}/auto-merge`);
+  },
+
+  toggleAutoMerge(prId: number): Promise<{ pr_id: number; auto_merge_enabled: boolean; message: string }> {
+    return fetchJSON<{ pr_id: number; auto_merge_enabled: boolean; message: string }>(`/pulls/${prId}/auto-merge/toggle`, {
+      method: 'POST',
+    });
+  },
+
+  forceMergePR(prId: number, reason?: string): Promise<{
+    success: boolean;
+    action: string;
+    pr_id: number;
+    pr_number: number;
+    merge_commit_sha: string;
+    merged_by: string;
+  }> {
+    return fetchJSON(`/pulls/${prId}/force-merge`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason || 'Manual operator force merge' }),
     });
   },
 

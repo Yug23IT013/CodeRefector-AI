@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { PullRequestDetail, BenchmarkRun } from '../types';
 import { PRStatusBadge } from '../components/PRStatusBadge';
 import { FindingCard } from '../components/FindingCard';
+import { AutoMergeGateCard } from '../components/AutoMergeGateCard';
 import { BenchmarkComparisonCard } from '../components/benchmarks/BenchmarkComparisonCard';
 import {
   ArrowLeft,
@@ -204,6 +205,19 @@ export const PRDetailPage: React.FC = () => {
           </div>
         </div>
       </Card>
+
+      {/* Auto-Merge Quality Gate & Force Merge */}
+      <div className="mt-6">
+        <AutoMergeGateCard
+          prId={pr.id}
+          initialGateStatus={pr.auto_merge_gate}
+          status={pr.status}
+          mergedAt={pr.merged_at}
+          mergedBy={pr.merged_by}
+          mergeCommitSha={pr.merge_commit_sha}
+          onMergedSuccess={() => loadData()}
+        />
+      </div>
 
       {/* Main Tab Navigation */}
       <div className="flex items-center gap-2 mt-8 pb-3 border-b border-border-subtle">

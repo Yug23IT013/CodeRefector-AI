@@ -44,6 +44,20 @@ export const PRListPage: React.FC = () => {
     }
   };
 
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncAndRefresh = async () => {
+    try {
+      setSyncing(true);
+      await api.syncRepositoryPRs(id).catch((err) => {
+        console.warn('Sync failed:', err);
+      });
+      await loadData();
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, [id]);
@@ -80,12 +94,12 @@ export const PRListPage: React.FC = () => {
         <Button
           variant="secondary"
           size="sm"
-          onClick={loadData}
-          disabled={loading}
-          icon={<RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />}
+          onClick={handleSyncAndRefresh}
+          disabled={loading || syncing}
+          icon={<RefreshCw className={`w-3.5 h-3.5 ${loading || syncing ? 'animate-spin' : ''}`} />}
           className="self-start sm:self-auto"
         >
-          Refresh
+          {syncing ? 'Syncing GitHub...' : 'Sync & Refresh'}
         </Button>
       </div>
 

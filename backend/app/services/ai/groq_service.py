@@ -38,10 +38,11 @@ class GroqReviewService(BaseAIService):
         diff: str,
         static_findings: List[FindingResult],
         file_contents: Optional[dict[str, str]] = None,
+        rag_context: Optional[str] = None,
     ) -> AIReviewResponse:
         if not self.api_key:
             logger.info("No GROQ_API_KEY set. Using MockReviewService fallback.")
-            return MockReviewService().generate_review(pr_title, pr_author, diff, static_findings, file_contents)
+            return MockReviewService().generate_review(pr_title, pr_author, diff, static_findings, file_contents, rag_context=rag_context)
 
         findings_summary = []
         for f in static_findings:
@@ -53,11 +54,14 @@ class GroqReviewService(BaseAIService):
         # Truncate diff to avoid exceeding token limits
         truncated_diff = diff[:20000] if len(diff) > 20000 else diff
 
+        rag_block = f"\n\n{rag_context}\n" if rag_context else ""
+
         system_prompt = (
             "You are an expert senior software engineer and security auditor conducting an automated code review on a GitHub Pull Request.\n"
             "Your review consists of two parts:\n"
             "1. An Executive Summary evaluating overall PR quality, security risk, and architectural integrity.\n"
-            "2. Actionable Inline Suggestions: For static analysis findings and other critical bugs in the diff, provide concrete replacement code fixes.\n\n"
+            "2. Actionable Inline Suggestions: For static analysis findings and other critical bugs in the diff, provide concrete replacement code fixes.\n"
+            f"{rag_block}\n"
             "You MUST respond ONLY with a valid JSON object matching this exact schema:\n"
             "{\n"
             '  "summary": "Markdown text with a concise executive overview and risk assessment.",\n'
@@ -123,7 +127,7 @@ class GroqReviewService(BaseAIService):
 
         # If all Groq models fail or encounter error, gracefully use MockReviewService fallback
         logger.warning("All Groq model attempts failed. Falling back to MockReviewService.")
-        return MockReviewService().generate_review(pr_title, pr_author, diff, static_findings, file_contents)
+        return MockReviewService().generate_review(pr_title, pr_author, diff, static_findings, file_contents, rag_context=rag_context)
 
     def _parse_json_response(self, text: str, static_findings: List[FindingResult]) -> AIReviewResponse:
         """Parse structured JSON from Groq completion."""

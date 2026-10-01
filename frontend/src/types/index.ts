@@ -62,6 +62,27 @@ export interface ReviewRun {
   completed_at: string | null;
 }
 
+export interface AutoMergeGateStatus {
+  pr_id: number;
+  pr_number: number;
+  title: string;
+  status: string;
+  auto_merge_enabled: boolean;
+  is_eligible: boolean;
+  is_clean: boolean;
+  severities: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    total: number;
+  };
+  blocking_reasons: string[];
+  merged_at: string | null;
+  merged_by: string | null;
+  merge_commit_sha: string | null;
+}
+
 export interface PullRequestDetail {
   id: number;
   repo_id: number;
@@ -77,6 +98,11 @@ export interface PullRequestDetail {
   latest_review: ReviewRun | null;
   findings: Finding[];
   total_reviews: number;
+  auto_merge_enabled?: boolean;
+  merged_at?: string | null;
+  merged_by?: string | null;
+  merge_commit_sha?: string | null;
+  auto_merge_gate?: AutoMergeGateStatus;
 }
 
 export interface User {
@@ -202,5 +228,42 @@ export interface BenchmarkTrendsData {
   repo_name: string;
   total_benchmarked_prs: number;
   benchmark_trends: BenchmarkTrendPoint[];
+}
+
+export interface RuleKnowledge {
+  rule_id: string;
+  title: string;
+  category: string;
+  severity: string;
+  description: string;
+  remediation: string;
+  example_bad?: string;
+  example_good?: string;
+}
+
+export interface RAGStatus {
+  backend: string;
+  rule_knowledge_count: number;
+  historical_findings_count: number;
+  storage_path: string;
+  rag_enabled: boolean;
+}
+
+export interface RAGSearchDocument {
+  id: string;
+  document: string;
+  metadata: Record<string, any>;
+  similarity: number;
+  distance: number;
+}
+
+export interface RAGSearchResults {
+  query: string;
+  collection_type: string;
+  results: {
+    query: string;
+    rules: RAGSearchDocument[];
+    historical_findings: RAGSearchDocument[];
+  };
 }
 

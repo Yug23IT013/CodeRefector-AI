@@ -232,5 +232,49 @@ class GitHubService:
             logger.error(f"Exception posting review comments: {e}")
             return 0
 
+    def merge_pull_request(
+        self,
+        owner: str,
+        repo: str,
+        pull_number: int,
+        commit_title: Optional[str] = None,
+        commit_message: Optional[str] = None,
+        merge_method: str = "squash",
+        head_sha: Optional[str] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Merge a pull request using GitHub REST API:
+        PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge
+        Returns (success: bool, message_or_sha: str)
+        """
+        if not self.token:
+            logger.info(f"[Dry Run] Auto-merge simulated for {owner}/{repo} PR #{pull_number}.")
+            return True, f"dry-run-merge-sha-{pull_number}"
+
+        url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pull_number}/merge"
+        payload: Dict[str, Any] = {
+            "commit_title": commit_title or f"Auto-merge PR #{pull_number} by CodeRefactor AI",
+            "commit_message": commit_message or "All static analysis and security findings verified clean (0 findings).",
+            "merge_method": merge_method,
+        }
+        if head_sha:
+            payload["sha"] = head_sha
+
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.put(url, headers=self._headers(), json=payload)
+                if response.status_code == 200:
+                    data = response.json()
+                    sha = data.get("sha", "merged")
+                    logger.info(f"Successfully merged PR #{pull_number} in {owner}/{repo} (SHA: {sha})")
+                    return True, sha
+                else:
+                    error_detail = response.json().get("message", response.text) if response.text else f"Status {response.status_code}"
+                    logger.error(f"GitHub PR merge failed: {response.status_code} - {error_detail}")
+                    return False, f"GitHub merge failed: {error_detail}"
+        except Exception as e:
+            logger.error(f"Exception merging PR #{pull_number}: {e}")
+            return False, str(e)
+
 
 github_service = GitHubService()

@@ -151,7 +151,13 @@ def sync_repository_prs(repo_id: int, db: Session = Depends(get_db)) -> Dict[str
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 
-    token = os.getenv("GITHUB_TOKEN")
+    token = None
+    if repo.user_id:
+        repo_owner = db.query(User).filter(User.id == repo.user_id).first()
+        if repo_owner and repo_owner.github_access_token:
+            token = repo_owner.github_access_token
+    token = token or os.getenv("GITHUB_TOKEN")
+
     headers = {
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "CodeRefactor-AI-Reviewer"
