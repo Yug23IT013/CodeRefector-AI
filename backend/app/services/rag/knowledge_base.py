@@ -18,7 +18,7 @@ RULE_KNOWLEDGE_BASE: List[Dict[str, str]] = [
         "severity": "critical",
         "description": "Hardcoding API tokens, private keys, JWT secrets, or cloud credentials in source code exposes sensitive infrastructure when committed to version control systems.",
         "remediation": "Store credentials in environment variables, .env files excluded from git, or secure key management systems (AWS Secrets Manager, HashiCorp Vault). Access them via os.environ or Pydantic BaseSettings.",
-        "example_bad": "API_KEY = 'sk-live-9382103810293810293'",
+        "example_bad": "API_KEY = 'dummy_secret_api_key_12345'",
         "example_good": "import os\nAPI_KEY = os.environ.get('API_KEY')",
     },
     {
