@@ -7,6 +7,7 @@ import { RepoListPage } from './pages/RepoListPage';
 import { PRListPage } from './pages/PRListPage';
 import { PRDetailPage } from './pages/PRDetailPage';
 import { RAGQueryPage } from './pages/RAGQueryPage';
+import { MCPHubPage } from './pages/MCPHubPage';
 
 const RootRoute: React.FC = () => {
   const { user, loading } = useAuth();
@@ -80,6 +81,14 @@ export const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <RAGQueryPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/mcp"
+                element={
+                  <ProtectedRoute>
+                    <MCPHubPage />
                   </ProtectedRoute>
                 }
               />

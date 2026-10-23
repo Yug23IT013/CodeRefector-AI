@@ -4,6 +4,7 @@ import {
   GitPullRequest,
   ShieldCheck,
   BrainCircuit,
+  Cpu,
   Plus,
   LogOut,
   Github,
@@ -33,6 +34,7 @@ export const Navbar: React.FC = () => {
 
   const isDashboardActive = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/repos') || location.pathname.startsWith('/pulls');
   const isRagActive = location.pathname.startsWith('/rag');
+  const isMcpActive = location.pathname.startsWith('/mcp');
 
   return (
     <>
@@ -84,6 +86,21 @@ export const Navbar: React.FC = () => {
                 >
                   <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
                   <span>Knowledge Base (RAG)</span>
+                </Link>
+
+                <Link
+                  to="/mcp"
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5 ${
+                    isMcpActive
+                      ? 'bg-surface-2 text-white border border-border-prominent shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-surface-1'
+                  }`}
+                >
+                  <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>MCP Hub</span>
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold uppercase">
+                    v2
+                  </span>
                 </Link>
               </nav>
             )}
@@ -155,6 +172,14 @@ export const Navbar: React.FC = () => {
                         >
                           <BrainCircuit className="w-3.5 h-3.5 mr-2.5 text-purple-400" />
                           <span>Knowledge Base (RAG)</span>
+                        </Link>
+                        <Link
+                          to="/mcp"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center px-4 py-2 text-xs text-slate-300 hover:text-white hover:bg-surface-3 transition-colors"
+                        >
+                          <Cpu className="w-3.5 h-3.5 mr-2.5 text-emerald-400" />
+                          <span>MCP Hub & Playground</span>
                         </Link>
                       </div>
 

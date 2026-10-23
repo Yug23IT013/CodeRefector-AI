@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.session import init_db
 from app.api.v1.router import api_v1_router
+from app.mcp.server import mcp_server
 
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
@@ -44,6 +45,9 @@ app.add_middleware(
 
 # Register API v1 routes
 app.include_router(api_v1_router)
+
+# Mount MCP Server-Sent Events (SSE) application for remote AI agents and IDEs
+app.mount("/mcp", mcp_server.sse_app())
 
 
 @app.get("/health", tags=["Health"])

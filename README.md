@@ -90,7 +90,12 @@ An automated code review, static analysis, and sandboxed runtime performance pro
 - **Quality Trends & Analytics Dashboard**:
   - Repository Health Score calculation (0–100) based on severity density and resolution trends.
   - Interactive SVG time-series area/line charts tracking critical, high, medium, and low findings across pull requests.
-  - Category distribution breakdowns (Security, Bug Risk, Performance, Style).
+- **Model Context Protocol (MCP) Integration**:
+  - **Dual Transports**: Supports both local `stdio` (Claude Desktop, Cursor, Antigravity IDE, Claude Code) and remote `SSE` mounted at `/mcp/sse`.
+  - **7 Exposed Tools**: `analyze_code_snippet`, `query_rag_knowledge`, `explain_rule`, `get_repo_health`, `get_pr_findings`, `run_review_on_diff`, `get_benchmark_metrics`.
+  - **5 Exposed Resources**: `coderefactor://rules`, `coderefactor://rules/{rule_id}`, `coderefactor://repos`, `coderefactor://repos/{repo_id}/summary`, `coderefactor://prs/{pr_id}`.
+  - **3 Exposed Prompts**: `review_pr_diff`, `remediate_finding`, `audit_security`.
+  - **Interactive Dashboard Hub (`/mcp`)**: Real-time server status, 1-click client configuration export, live tool playground, and resource inspector.
 
 ---
 
