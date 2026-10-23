@@ -159,8 +159,14 @@ class VectorStoreService:
         return str(chroma_path)
 
     def _init_vector_store(self):
+        if settings.VECTOR_STORE_BACKEND != "chromadb":
+            logger.info("Using built-in zero-dependency LightweightVectorIndex (TF-IDF Cosine similarity).")
+            self.backend_type = "fallback"
+            return
+
         try:
-            import chromadb
+            import importlib
+            chromadb = importlib.import_module("chromadb")
             persist_dir = self._get_storage_path()
             logger.info("Initializing ChromaDB at %s", persist_dir)
             self.chroma_client = chromadb.PersistentClient(path=persist_dir)

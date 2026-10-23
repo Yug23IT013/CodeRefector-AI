@@ -50,7 +50,7 @@ function analyzeWithBabel(code, filePath) {
             message: 'Avoid dynamic code execution via eval(), which introduces Remote Code Execution vulnerabilities.'
           });
         }
-        // Check for Function() constructor
+        // Check for Function() constructor call
         if (callee.type === 'Identifier' && callee.name === 'Function') {
           findings.push({
             file_path: filePath,
@@ -76,6 +76,19 @@ function analyzeWithBabel(code, filePath) {
             category: 'security',
             rule_id: 'JS_SEC003',
             message: 'document.write() bypasses DOM safety checks and facilitates Cross-Site Scripting (XSS).'
+          });
+        }
+      },
+      NewExpression(path) {
+        const callee = path.node.callee;
+        if (callee.type === 'Identifier' && callee.name === 'Function') {
+          findings.push({
+            file_path: filePath,
+            line_number: callee.loc ? callee.loc.start.line : 1,
+            severity: 'critical',
+            category: 'security',
+            rule_id: 'JS_SEC002',
+            message: 'Function constructor acts like eval() and allows arbitrary string code execution.'
           });
         }
       },

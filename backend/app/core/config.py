@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # RAG (Retrieval-Augmented Generation) Configuration
     RAG_ENABLED: bool = True
+    VECTOR_STORE_BACKEND: str = "tfidf"  # "tfidf" (lightweight built-in) or "chromadb"
     CHROMA_PERSIST_PATH: str = "./chroma_db"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     RAG_TOP_K: int = 3

@@ -1,23 +1,21 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional, Literal
 from app.services.analyzer.base import FindingResult
 
 
-@dataclass
-class AIInlineSuggestion:
+class AIInlineSuggestion(BaseModel):
     file_path: str
-    line_number: int
+    line_number: int = 1
     suggestion_code: str
     explanation: str
     rule_id: Optional[str] = None
 
 
-@dataclass
-class AIReviewResponse:
+class AIReviewResponse(BaseModel):
     summary: str
-    risk_level: str  # "low", "medium", "high", "critical"
-    inline_suggestions: List[AIInlineSuggestion] = field(default_factory=list)
+    risk_level: Literal["low", "medium", "high", "critical"] = "medium"
+    inline_suggestions: List[AIInlineSuggestion] = Field(default_factory=list)
 
 
 class BaseAIService(ABC):

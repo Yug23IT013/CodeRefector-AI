@@ -154,3 +154,39 @@ def calculate_circle_area(radius: float) -> float:
 """
     findings = analyzer.analyze("clean.py", code)
     assert len(findings) == 0
+
+
+def test_sec002_false_positive_suppression(analyzer):
+    """Benign low-entropy strings like 'bearer ' or 'temporary' must NOT be flagged as secrets."""
+    code = """
+auth_header = "bearer "
+session_type = "temporary"
+cache_key = "user_profile_prefix"
+"""
+    findings = analyzer.analyze("benign.py", code)
+    secret_findings = [f for f in findings if f.rule_id == "SEC002"]
+    assert len(secret_findings) == 0
+
+
+def test_sec003_non_sql_execute_suppression(analyzer):
+    """Calling .execute() on a non-database object (e.g. task_runner) must NOT be flagged as SQL injection."""
+    code = """
+def run_job(task_runner, job_id):
+    task_runner.execute(f"run_job_{job_id}")
+"""
+    findings = analyzer.analyze("tasks.py", code)
+    sql_findings = [f for f in findings if f.rule_id == "SEC003"]
+    assert len(sql_findings) == 0
+
+
+def test_perf002_all_export_suppression(analyzer):
+    """Symbols listed in __all__ must NOT be flagged as unused imports."""
+    code = """
+from app.db.models import User, Repository
+
+__all__ = ["User", "Repository"]
+"""
+    findings = analyzer.analyze("exports.py", code)
+    unused_findings = [f for f in findings if f.rule_id == "PERF002"]
+    assert len(unused_findings) == 0
+

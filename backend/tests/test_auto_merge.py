@@ -1,6 +1,7 @@
 import pytest
-from app.db.models import Repository, PullRequest, ReviewRun, Finding
+from app.db.models import Repository, PullRequest, ReviewRun, Finding, User
 from app.services.auto_merge_service import auto_merge_service
+from app.core.jwt import create_access_token
 
 
 def test_auto_merge_blocked_when_findings_exist(db_session):
@@ -131,10 +132,18 @@ def test_force_merge_bypasses_findings(db_session):
     db_session.add(f)
     db_session.commit()
 
+    test_user = User(
+        github_id=9999,
+        username="lead-dev",
+    )
+    db_session.add(test_user)
+    db_session.commit()
+    db_session.refresh(test_user)
+
     res = auto_merge_service.force_merge(
         pr_id=pr.id,
         db=db_session,
-        user=None,
+        user=test_user,
         reason="Emergency hotfix verified manually",
     )
     assert res["success"] is True
@@ -143,11 +152,11 @@ def test_force_merge_bypasses_findings(db_session):
     db_session.refresh(pr)
     assert pr.status == "merged"
     assert pr.merged_at is not None
-    assert "Force Merged" in pr.merged_by
+    assert "@lead-dev (Force Merged)" in pr.merged_by
 
 
 def test_api_auto_merge_endpoints(client, db_session):
-    """Test /auto-merge checklist and toggle endpoints."""
+    """Test /auto-merge checklist, toggle, and force-merge endpoints with auth enforcement."""
     repo = Repository(full_name="test-org/api-endpoints-repo", default_branch="main")
     db_session.add(repo)
     db_session.commit()
@@ -163,25 +172,47 @@ def test_api_auto_merge_endpoints(client, db_session):
         auto_merge_enabled=True,
     )
     db_session.add(pr)
+
+    operator = User(
+        github_id=8888,
+        username="operator-admin",
+    )
+    db_session.add(operator)
     db_session.commit()
     db_session.refresh(pr)
+    db_session.refresh(operator)
 
-    # GET /auto-merge status
+    # 1. Unauthenticated requests to toggle and force-merge MUST be rejected with 401
+    res_unauth_toggle = client.post(f"/api/v1/pulls/{pr.id}/auto-merge/toggle")
+    assert res_unauth_toggle.status_code == 401
+
+    res_unauth_force = client.post(
+        f"/api/v1/pulls/{pr.id}/force-merge",
+        json={"reason": "Testing unauthenticated bypass"}
+    )
+    assert res_unauth_force.status_code == 401
+
+    # 2. Authenticated operator request
+    token = create_access_token({"sub": str(operator.id), "username": operator.username})
+    auth_headers = {"Authorization": f"Bearer {token}"}
+
+    # GET /auto-merge status (read endpoint)
     res = client.get(f"/api/v1/pulls/{pr.id}/auto-merge")
     assert res.status_code == 200
     data = res.json()
     assert data["pr_id"] == pr.id
     assert data["auto_merge_enabled"] is True
 
-    # POST /auto-merge/toggle
-    res_toggle = client.post(f"/api/v1/pulls/{pr.id}/auto-merge/toggle")
+    # POST /auto-merge/toggle with auth
+    res_toggle = client.post(f"/api/v1/pulls/{pr.id}/auto-merge/toggle", headers=auth_headers)
     assert res_toggle.status_code == 200
     assert res_toggle.json()["auto_merge_enabled"] is False
 
-    # POST /force-merge via API
+    # POST /force-merge via API with auth
     res_force = client.post(
         f"/api/v1/pulls/{pr.id}/force-merge",
-        json={"reason": "Testing API force merge"}
+        json={"reason": "Testing API force merge"},
+        headers=auth_headers
     )
     assert res_force.status_code == 200
     assert res_force.json()["action"] == "force_merged"

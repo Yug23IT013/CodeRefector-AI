@@ -165,3 +165,13 @@ class PostedComment(Base):
     )
 
     pull_request: Mapped["PullRequest"] = relationship("PullRequest", back_populates="posted_comments")
+
+
+class WebhookDelivery(Base):
+    """Tracks unique GitHub webhook delivery IDs (X-GitHub-Delivery) to prevent replay attacks."""
+    __tablename__ = "webhook_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    delivery_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

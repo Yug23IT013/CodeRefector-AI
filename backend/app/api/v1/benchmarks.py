@@ -1,5 +1,4 @@
 from typing import Any, Dict, List, Optional
-import random
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -7,88 +6,17 @@ from app.db.session import get_db
 from app.db.models import Repository, PullRequest, BenchmarkRun, User
 from app.core.security import verify_api_token
 from app.core.jwt import get_optional_current_user
+from app.services.benchmark_service import benchmark_service
 
 router = APIRouter(tags=["Benchmarks & Performance"])
 
 
 def generate_benchmark_suite(pr_number: int, commit_sha: str) -> Dict[str, Any]:
     """
-    Generate realistic benchmark execution metrics comparing base vs PR branch.
-    Includes granular function/route profiling for sandbox simulations.
+    Executes real measured benchmark suites comparing execution throughput and memory.
     """
-    # Base baseline metrics
-    base_latency = round(random.uniform(35.0, 75.0), 2)
-    base_memory = round(random.uniform(42.0, 68.0), 2)
+    return benchmark_service.measure_pr_benchmark_suite(pr_number, commit_sha)
 
-    # PR branch metrics with small variance (mostly improvements or minor regressions)
-    latency_delta_factor = random.choice([0.82, 0.88, 0.94, 1.02, 1.15, 0.79])
-    pr_latency = round(base_latency * latency_delta_factor, 2)
-    latency_change_pct = round(((pr_latency - base_latency) / base_latency) * 100.0, 2)
-
-    memory_delta_factor = random.choice([0.92, 0.97, 1.01, 1.08, 0.90])
-    pr_memory = round(base_memory * memory_delta_factor, 2)
-    memory_change_pct = round(((pr_memory - base_memory) / base_memory) * 100.0, 2)
-
-    cpu_usage = round(random.uniform(14.0, 38.0), 1)
-
-    # Determine regression verdict
-    regression_detected = latency_change_pct > 10.0 or memory_change_pct > 12.0
-    if regression_detected:
-        verdict = "regression"
-    elif latency_change_pct < -5.0 or memory_change_pct < -5.0:
-        verdict = "improved"
-    else:
-        verdict = "stable"
-
-    # Micro-benchmarks breakdown
-    suite_cases = [
-        {
-            "name": "AST Static Parsing Throughput",
-            "base_ms": round(base_latency * 0.35, 2),
-            "pr_ms": round(pr_latency * 0.35, 2),
-            "delta_pct": round(((pr_latency - base_latency) / base_latency) * 100.0, 1),
-            "memory_mb": round(pr_memory * 0.30, 2),
-            "status": "passed" if latency_change_pct <= 10.0 else "slow"
-        },
-        {
-            "name": "Webhook Payload Intake & HMAC Verification",
-            "base_ms": round(base_latency * 0.15, 2),
-            "pr_ms": round(pr_latency * 0.15, 2),
-            "delta_pct": round(((pr_latency - base_latency) / base_latency) * 100.0, 1),
-            "memory_mb": round(pr_memory * 0.15, 2),
-            "status": "passed"
-        },
-        {
-            "name": "AI Prompt Context Serialization",
-            "base_ms": round(base_latency * 0.28, 2),
-            "pr_ms": round(pr_latency * 0.28, 2),
-            "delta_pct": round(((pr_latency - base_latency) / base_latency) * 100.0, 1),
-            "memory_mb": round(pr_memory * 0.35, 2),
-            "status": "passed"
-        },
-        {
-            "name": "Database Query & Findings Persistence",
-            "base_ms": round(base_latency * 0.22, 2),
-            "pr_ms": round(pr_latency * 0.22, 2),
-            "delta_pct": round(((pr_latency - base_latency) / base_latency) * 100.0, 1),
-            "memory_mb": round(pr_memory * 0.20, 2),
-            "status": "passed"
-        }
-    ]
-
-    return {
-        "base_latency_ms": base_latency,
-        "pr_latency_ms": pr_latency,
-        "latency_change_pct": latency_change_pct,
-        "base_memory_mb": base_memory,
-        "pr_memory_mb": pr_memory,
-        "memory_change_pct": memory_change_pct,
-        "cpu_usage_pct": cpu_usage,
-        "test_cases_count": len(suite_cases),
-        "regression_detected": regression_detected,
-        "summary_verdict": verdict,
-        "suite_details": suite_cases,
-    }
 
 
 @router.get("/pulls/{pr_id}/benchmarks", dependencies=[Depends(verify_api_token)])

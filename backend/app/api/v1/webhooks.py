@@ -1,11 +1,11 @@
 import json
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, Response, status, Depends
 from sqlalchemy.orm import Session
 from app.core.security import verify_github_signature
 from app.db.session import get_db
-from app.db.models import Repository, PullRequest
+from app.db.models import Repository, PullRequest, WebhookDelivery
 from app.services.orchestrator import review_orchestrator
 
 logger = logging.getLogger(__name__)
@@ -19,12 +19,13 @@ async def github_webhook(
     background_tasks: BackgroundTasks,
     x_github_event: str = Header(..., alias="X-GitHub-Event"),
     x_hub_signature_256: str = Header(None, alias="X-Hub-Signature-256"),
+    x_github_delivery: Optional[str] = Header(None, alias="X-GitHub-Delivery"),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Intake endpoint for GitHub Webhook events.
-    Verifies HMAC-SHA256 signature, extracts PR metadata, persists to DB,
-    and enqueues static + AI analysis in the background.
+    Verifies HMAC-SHA256 signature, enforces replay protection on X-GitHub-Delivery,
+    extracts PR metadata, persists to DB, and enqueues static + AI analysis in the background.
     """
     raw_body = await request.body()
 
@@ -36,6 +37,24 @@ async def github_webhook(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-Hub-Signature-256 header",
         )
+
+    # 1b. Enforce Replay Protection on X-GitHub-Delivery
+    if x_github_delivery:
+        existing_delivery = db.query(WebhookDelivery).filter(
+            WebhookDelivery.delivery_id == x_github_delivery
+        ).first()
+        if existing_delivery:
+            logger.warning(f"Rejected duplicate webhook delivery ID: {x_github_delivery}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Duplicate webhook delivery ID '{x_github_delivery}'. Replay rejected.",
+            )
+        delivery_record = WebhookDelivery(
+            delivery_id=x_github_delivery,
+            event_type=x_github_event,
+        )
+        db.add(delivery_record)
+        db.commit()
 
     # 2. Parse JSON body
     try:

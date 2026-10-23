@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.db.models import Repository, PullRequest, ReviewRun, Finding, User
 from app.core.security import verify_api_token
-from app.core.jwt import get_optional_current_user
+from app.core.jwt import get_optional_current_user, get_current_user
 from app.services.orchestrator import review_orchestrator
 from app.services.auto_merge_service import auto_merge_service
 
@@ -237,8 +237,12 @@ def get_auto_merge_status(pr_id: int, db: Session = Depends(get_db)) -> Dict[str
 
 
 @router.post("/pulls/{pr_id}/auto-merge/toggle", dependencies=[Depends(verify_api_token)])
-def toggle_auto_merge(pr_id: int, db: Session = Depends(get_db)) -> Dict[str, Any]:
-    """Toggle auto-merge enabled/disabled state for a PR."""
+def toggle_auto_merge(
+    pr_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Toggle auto-merge enabled/disabled state for a PR. Requires authenticated user."""
     pr = db.query(PullRequest).filter(PullRequest.id == pr_id).first()
     if not pr:
         raise HTTPException(status_code=404, detail="Pull request not found")
@@ -255,10 +259,10 @@ def toggle_auto_merge(pr_id: int, db: Session = Depends(get_db)) -> Dict[str, An
 def force_merge_pr(
     pr_id: int,
     payload: Optional[ForceMergePayload] = None,
-    current_user: Optional[User] = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Force merge a PR, bypassing the 0-findings quality gate."""
+    """Force merge a PR, bypassing the 0-findings quality gate. Requires authenticated operator."""
     reason = payload.reason if payload else None
     result = auto_merge_service.force_merge(pr_id=pr_id, db=db, user=current_user, reason=reason)
     if not result.get("success"):

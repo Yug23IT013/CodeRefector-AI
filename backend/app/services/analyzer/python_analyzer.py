@@ -47,6 +47,15 @@ class CyclomaticComplexityVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _shannon_entropy(s: str) -> float:
+    """Calculate Shannon entropy to distinguish random credential tokens from regular words."""
+    if not s:
+        return 0.0
+    import math
+    prob = [float(s.count(c)) / len(s) for c in set(s)]
+    return -sum(p * math.log2(p) for p in prob)
+
+
 class PythonASTVisitor(ast.NodeVisitor):
     """Visits Python AST to identify anti-patterns, security risks, and code smells."""
 
@@ -65,20 +74,32 @@ class PythonASTVisitor(ast.NodeVisitor):
         "ey",                            # JWTs (base64 header)
     )
 
+    SQL_KEYWORDS_PATTERN = re.compile(
+        r"\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|FROM|WHERE)\b",
+        re.IGNORECASE
+    )
+
+    DB_CALLER_TERMS = ("cur", "cursor", "db", "conn", "connection", "session", "sql")
+
     def __init__(self, file_path: str, lines: List[str]):
         self.file_path = file_path
         self.lines = lines
         self.findings: List[FindingResult] = []
         self.imported_names: Dict[str, int] = {}  # alias/name -> lineno
         self.used_names: Set[str] = set()
+        self.string_literals: Set[str] = set()
         # Maps variable name -> line number where it was assigned a tainted SQL string.
-        # Used for two-pass SQL injection detection (catches `query = f"..."; cursor.execute(query)`).
         self._tainted_sql_vars: Dict[str, int] = {}
 
     def _get_snippet(self, lineno: int) -> Optional[str]:
         if 1 <= lineno <= len(self.lines):
             return self.lines[lineno - 1].strip()
         return None
+
+    def visit_Constant(self, node: ast.Constant):
+        if isinstance(node.value, str):
+            self.string_literals.add(node.value)
+        self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name):
         if isinstance(node.ctx, ast.Load):
@@ -150,11 +171,17 @@ class PythonASTVisitor(ast.NodeVisitor):
                     ))
 
         # Rule SEC003: SQL string concatenation / formatting
+        # Only flag if caller is a database cursor/session or snippet contains SQL statements
         if isinstance(node.func, ast.Attribute) and node.func.attr in ("execute", "executemany"):
-            if node.args:
+            caller_name = getattr(node.func.value, "id", "") if isinstance(node.func.value, ast.Name) else ""
+            is_db_caller = any(term in caller_name.lower() for term in self.DB_CALLER_TERMS)
+            snippet = self._get_snippet(node.lineno) or ""
+            has_sql_keywords = bool(self.SQL_KEYWORDS_PATTERN.search(snippet))
+
+            if (is_db_caller or has_sql_keywords) and node.args:
                 first_arg = node.args[0]
                 is_sql_injection_risk = False
-                tainted_line = node.lineno  # default: flag the execute() call line
+                tainted_line = node.lineno
 
                 # Case A: inline f-string / format / concat directly inside execute()
                 if isinstance(first_arg, ast.JoinedStr):
@@ -166,8 +193,7 @@ class PythonASTVisitor(ast.NodeVisitor):
                       and first_arg.func.attr == "format"):
                     is_sql_injection_risk = True
 
-                # Case B: variable reference — check if the variable was tainted
-                # earlier (e.g. `query = f"..."` then `cursor.execute(query)`).
+                # Case B: variable reference — check if the variable was tainted earlier
                 elif isinstance(first_arg, ast.Name):
                     if first_arg.id in self._tainted_sql_vars:
                         is_sql_injection_risk = True
@@ -187,16 +213,31 @@ class PythonASTVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign):
-        # Rule SEC002: Hardcoded secrets detection
+        # Rule SEC002: Hardcoded secrets detection with entropy & pattern checks
         for target in node.targets:
             var_name = getattr(target, "id", None)
             if var_name and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                val = node.value.value
-                # Check variable name heuristic or explicit secret prefix in value
+                val = node.value.value.strip()
                 is_secret_name = bool(self.SECRET_VAR_PATTERN.match(var_name))
                 has_secret_prefix = any(val.startswith(p) for p in self.SECRET_VAL_PREFIXES)
 
-                if (is_secret_name and len(val) >= 8 and not val.startswith("${") and not val.startswith("env:")) or has_secret_prefix:
+                entropy = _shannon_entropy(val)
+                # Exclude benign identifier prefixes like cache_key, sort_key, lookup_key
+                is_benign_var = any(var_name.lower().startswith(prefix) for prefix in ("cache_", "sort_", "lookup_", "primary_", "foreign_", "dict_", "item_"))
+                # Avoid benign strings (e.g. 'bearer ', 'temporary', 'authorized', simple single-word identifiers)
+                has_token_diversity = any(c.isdigit() for c in val) or (any(c.isupper() for c in val) and any(c.islower() for c in val))
+                is_high_entropy_secret = (
+                    is_secret_name
+                    and not is_benign_var
+                    and len(val) >= 12
+                    and not val.startswith("${")
+                    and not val.startswith("env:")
+                    and not val.lower() in ("bearer ", "bearer", "none", "true", "false", "temporary")
+                    and entropy >= 2.8
+                    and has_token_diversity
+                )
+
+                if has_secret_prefix or is_high_entropy_secret:
                     self.findings.append(FindingResult(
                         file_path=self.file_path,
                         line_number=node.lineno,
@@ -207,15 +248,13 @@ class PythonASTVisitor(ast.NodeVisitor):
                         code_snippet=self._get_snippet(node.lineno),
                     ))
 
-        # Two-pass SQL injection: track variables assigned tainted SQL strings so
-        # that `cursor.execute(query)` is caught even when the f-string is built
-        # in a separate assignment statement (not inline in the execute() call).
+        # Two-pass SQL injection: track variables assigned tainted SQL strings
         if len(node.targets) == 1:
             var_name = getattr(node.targets[0], "id", None)
             if var_name:
                 value = node.value
                 is_tainted = (
-                    isinstance(value, ast.JoinedStr)  # f-string
+                    isinstance(value, ast.JoinedStr)
                     or (isinstance(value, ast.BinOp) and isinstance(value.op, (ast.Add, ast.Mod)))
                     or (isinstance(value, ast.Call)
                         and isinstance(value.func, ast.Attribute)
@@ -344,10 +383,10 @@ class PythonAnalyzer(LanguageAnalyzer):
         visitor = PythonASTVisitor(file_path=file_path, lines=lines)
         visitor.visit(tree)
 
-        # Rule PERF002: Unused imports (exclude __init__.py files)
+        # Rule PERF002: Unused imports (exclude __init__.py files and __all__ / string annotations)
         if not file_path.endswith("__init__.py"):
             for imported_name, lineno in visitor.imported_names.items():
-                if imported_name not in visitor.used_names:
+                if imported_name not in visitor.used_names and imported_name not in visitor.string_literals:
                     visitor.findings.append(FindingResult(
                         file_path=file_path,
                         line_number=lineno,

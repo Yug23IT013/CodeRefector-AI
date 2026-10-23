@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import re
 from typing import Any, Dict, List, Optional, Tuple
 import httpx
 from sqlalchemy.orm import Session
@@ -154,6 +155,25 @@ class GitHubService:
         Post targeted inline review comments to the PR using GitHub Pull Request Review API.
         Deduplicates against already posted comments.
         """
+        # 1. Fetch existing comments from GitHub if token is set to cross-reference
+        github_existing_tags = set()
+        if self.token:
+            try:
+                with httpx.Client(timeout=15.0) as client:
+                    gh_res = client.get(
+                        f"{self.base_url}/repos/{owner}/{repo}/pulls/{pull_number}/comments",
+                        headers=self._headers(),
+                    )
+                    if gh_res.status_code == 200:
+                        for existing_c in gh_res.json():
+                            body_txt = existing_c.get("body", "")
+                            # Look for embedded tag <!-- coderefactor:<rule_id>:<path> -->
+                            match = re.search(r"<!--\s*coderefactor:([^:]+):([^\s]+)\s*-->", body_txt)
+                            if match:
+                                github_existing_tags.add(f"{match.group(2)}:{match.group(1)}")
+            except Exception as e:
+                logger.warning(f"Could not fetch existing PR comments for deduplication: {e}")
+
         # Filter comments that haven't been posted yet
         new_comments = []
         comment_records = []
@@ -162,11 +182,18 @@ class GitHubService:
             path = c.get("path")
             line = c.get("line", 1)
             body = c.get("body", "")
-            rule_id = c.get("rule_id", "")
+            rule_id = c.get("rule_id", "GEN001")
 
-            # Deduplication key: file_path + line_number + rule_id
-            dedup_key = f"{path}:{line}:{rule_id}:{body[:80]}"
-            body_hash = hashlib.sha256(dedup_key.encode("utf-8")).hexdigest()
+            # Unique resilient finding signature
+            sig_key = f"{path}:{rule_id}"
+
+            # Check GitHub remote comments first
+            if sig_key in github_existing_tags:
+                logger.info(f"Skipping comment for {sig_key} (already exists on GitHub PR).")
+                continue
+
+            # Deduplication key across database
+            body_hash = hashlib.sha256(sig_key.encode("utf-8")).hexdigest()
 
             existing = db.query(PostedComment).filter(
                 PostedComment.pr_id == pr_id,
@@ -174,10 +201,11 @@ class GitHubService:
             ).first()
 
             if not existing:
+                tagged_body = f"{body}\n\n<!-- coderefactor:{rule_id}:{path} -->"
                 new_comments.append({
                     "path": path,
                     "line": line,
-                    "body": body,
+                    "body": tagged_body,
                 })
                 comment_records.append((body_hash, path, line))
 

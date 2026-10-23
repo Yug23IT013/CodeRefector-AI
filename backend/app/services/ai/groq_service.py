@@ -1,8 +1,10 @@
 import json
 import logging
 import re
+import time
 from typing import List, Optional
 import httpx
+from pydantic import ValidationError
 from app.core.config import settings
 from app.services.analyzer.base import FindingResult
 from app.services.ai.base import BaseAIService, AIReviewResponse, AIInlineSuggestion
@@ -23,7 +25,7 @@ FALLBACK_MODELS = [
 class GroqReviewService(BaseAIService):
     """
     Groq Free Cloud AI integration for high-speed automated code reviews.
-    Supports auto-fallback across available Groq models and graceful mock fallback.
+    Supports auto-fallback across available Groq models, rate-limit backoff, and graceful mock fallback.
     """
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
@@ -105,32 +107,49 @@ class GroqReviewService(BaseAIService):
                 "max_tokens": 4096,
             }
 
-            try:
-                with httpx.Client(timeout=45.0) as client:
-                    response = client.post(self.base_url, headers=headers, json=payload)
-                    if response.status_code == 200:
-                        res_data = response.json()
-                        content = res_data["choices"][0]["message"]["content"]
-                        return self._parse_json_response(content, static_findings)
+            max_retries = 3
+            initial_backoff = 1.0
+            model_succeeded = False
 
-                    # If model not found (404), try next model in loop
-                    if response.status_code == 404 or "model_not_found" in response.text:
-                        logger.warning(f"Groq model '{target_model}' not available on this account, trying next fallback...")
-                        continue
+            for attempt in range(max_retries):
+                try:
+                    with httpx.Client(timeout=45.0) as client:
+                        response = client.post(self.base_url, headers=headers, json=payload)
+                        if response.status_code == 200:
+                            res_data = response.json()
+                            content = res_data["choices"][0]["message"]["content"]
+                            return self._parse_json_response(content, static_findings)
 
-                    logger.error(f"Groq API error ({response.status_code}): {response.text}")
+                        if response.status_code == 429:
+                            retry_after = response.headers.get("Retry-After")
+                            try:
+                                sleep_sec = float(retry_after) if retry_after else (initial_backoff * (2 ** attempt))
+                            except ValueError:
+                                sleep_sec = initial_backoff * (2 ** attempt)
+                            logger.warning(
+                                f"Groq API rate limit (429) on model '{target_model}'. Backing off {sleep_sec:.2f}s (attempt {attempt + 1}/{max_retries})..."
+                            )
+                            time.sleep(sleep_sec)
+                            continue
+
+                        # If model not found (404), break retry loop and try next fallback model
+                        if response.status_code == 404 or "model_not_found" in response.text:
+                            logger.warning(f"Groq model '{target_model}' not available on this account, trying next fallback...")
+                            break
+
+                        logger.error(f"Groq API error ({response.status_code}): {response.text}")
+                        break
+
+                except Exception as e:
+                    logger.warning(f"Error calling Groq model '{target_model}': {e}")
                     break
-
-            except Exception as e:
-                logger.warning(f"Error calling Groq model '{target_model}': {e}")
-                continue
 
         # If all Groq models fail or encounter error, gracefully use MockReviewService fallback
         logger.warning("All Groq model attempts failed. Falling back to MockReviewService.")
         return MockReviewService().generate_review(pr_title, pr_author, diff, static_findings, file_contents, rag_context=rag_context)
 
     def _parse_json_response(self, text: str, static_findings: List[FindingResult]) -> AIReviewResponse:
-        """Parse structured JSON from Groq completion."""
+        """Parse and strictly validate structured JSON from Groq completion using Pydantic."""
         clean_text = text.strip()
         if clean_text.startswith("```"):
             clean_text = re.sub(r"^```(?:json)?\s*", "", clean_text)
@@ -141,7 +160,14 @@ class GroqReviewService(BaseAIService):
         except json.JSONDecodeError:
             match = re.search(r"(\{.*\})", clean_text, re.DOTALL)
             if match:
-                data = json.loads(match.group(1))
+                try:
+                    data = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    return AIReviewResponse(
+                        summary=text,
+                        risk_level="medium",
+                        inline_suggestions=[],
+                    )
             else:
                 return AIReviewResponse(
                     summary=text,
@@ -149,30 +175,41 @@ class GroqReviewService(BaseAIService):
                     inline_suggestions=[],
                 )
 
-        summary = data.get("summary", "Automated code review completed via Groq AI.")
-        risk_level = data.get("risk_level", "medium").lower()
+        if not isinstance(data, dict):
+            return AIReviewResponse(
+                summary=text,
+                risk_level="medium",
+                inline_suggestions=[],
+            )
+
+        # Standardize risk_level
+        risk_level = str(data.get("risk_level", "medium")).lower()
         if risk_level not in ("low", "medium", "high", "critical"):
             risk_level = "medium"
+        data["risk_level"] = risk_level
 
-        suggestions: List[AIInlineSuggestion] = []
-        for s in data.get("inline_suggestions", []):
-            file_p = s.get("file_path", "")
-            line_n = s.get("line_number", 1)
-            explanation = s.get("explanation", "")
-            suggestion_code = s.get("suggestion_code", "")
-            rule_id = s.get("rule_id")
+        # Filter and normalize inline_suggestions
+        raw_suggestions = data.get("inline_suggestions") or []
+        valid_suggestions = []
+        if isinstance(raw_suggestions, list):
+            for s in raw_suggestions:
+                if isinstance(s, dict) and s.get("file_path") and s.get("explanation"):
+                    valid_suggestions.append({
+                        "file_path": str(s.get("file_path")),
+                        "line_number": int(s.get("line_number") or 1),
+                        "suggestion_code": str(s.get("suggestion_code") or ""),
+                        "explanation": str(s.get("explanation") or ""),
+                        "rule_id": s.get("rule_id"),
+                    })
+        data["inline_suggestions"] = valid_suggestions
 
-            if file_p and explanation:
-                suggestions.append(AIInlineSuggestion(
-                    file_path=file_p,
-                    line_number=line_n,
-                    suggestion_code=suggestion_code,
-                    explanation=explanation,
-                    rule_id=rule_id,
-                ))
+        try:
+            return AIReviewResponse.model_validate(data)
+        except ValidationError as val_err:
+            logger.warning(f"Pydantic validation error parsing Groq response: {val_err}. Returning safe fallback.")
+            return AIReviewResponse(
+                summary=data.get("summary") or text,
+                risk_level=risk_level,
+                inline_suggestions=[],
+            )
 
-        return AIReviewResponse(
-            summary=summary,
-            risk_level=risk_level,
-            inline_suggestions=suggestions,
-        )

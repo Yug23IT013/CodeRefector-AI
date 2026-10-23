@@ -242,8 +242,11 @@ class AutoMergeService:
         owner, repo_name = repo.full_name.split("/", 1) if "/" in repo.full_name else ("", repo.full_name)
         merge_method = repo.merge_method or "squash"
 
+        if not user:
+            return {"success": False, "error": "Authentication required: only authenticated operators may force-merge pull requests"}
+
         counts = self.get_latest_finding_counts(pr_id, db)
-        user_name = user.username if user else "Authorized User"
+        user_name = user.username or f"user-{user.id}"
         merged_by_tag = f"@{user_name} (Force Merged)"
         override_note = reason.strip() if reason and reason.strip() else "Manual override approved by operator"
 
