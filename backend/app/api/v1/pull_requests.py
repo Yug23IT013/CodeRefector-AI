@@ -181,6 +181,8 @@ def trigger_re_review(
     if not pr:
         raise HTTPException(status_code=404, detail="Pull request not found")
 
+    from app.core.config import settings
+
     repo = pr.repository
     token = None
     if repo and repo.user_id:
@@ -191,7 +193,7 @@ def trigger_re_review(
         u = db.query(User).filter(User.username == pr.author).first()
         if u and u.github_access_token:
             token = u.github_access_token
-    token = token or os.getenv("GITHUB_TOKEN")
+    token = token or settings.GITHUB_TOKEN
 
     if repo and token:
         try:
@@ -202,6 +204,9 @@ def trigger_re_review(
             }
             with httpx.Client(timeout=10.0) as client:
                 res = client.get(f"https://api.github.com/repos/{repo.full_name}/pulls/{pr.pr_number}", headers=headers)
+                if res.status_code == 401 and settings.GITHUB_TOKEN and token != settings.GITHUB_TOKEN:
+                    headers["Authorization"] = f"Bearer {settings.GITHUB_TOKEN}"
+                    res = client.get(f"https://api.github.com/repos/{repo.full_name}/pulls/{pr.pr_number}", headers=headers)
                 if res.status_code == 200:
                     data = res.json()
                     new_head = data.get("head", {}).get("sha")

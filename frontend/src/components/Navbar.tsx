@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   GitPullRequest,
+  FolderGit2,
   ShieldCheck,
   BrainCircuit,
   Cpu,
@@ -44,7 +45,7 @@ export const Navbar: React.FC = () => {
           <div className="flex items-center space-x-6">
             <Link to="/" className="flex items-center space-x-3 group">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-indigo-600 flex items-center justify-center shadow-glow-sky group-hover:scale-105 transition-transform duration-200">
-                <ShieldCheck className="w-5 h-5 text-white" />
+                <GitPullRequest className="w-5 h-5 text-white" />
               </div>
               <div>
                 <div className="flex items-center space-x-1.5">
@@ -72,7 +73,7 @@ export const Navbar: React.FC = () => {
                       : 'text-slate-400 hover:text-slate-200 hover:bg-surface-1'
                   }`}
                 >
-                  <GitPullRequest className="w-3.5 h-3.5 text-brand-400" />
+                  <FolderGit2 className="w-3.5 h-3.5 text-brand-400" />
                   <span>Repositories</span>
                 </Link>
 

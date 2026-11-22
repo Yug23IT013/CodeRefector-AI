@@ -353,7 +353,7 @@ export const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
             <div className="w-5 h-5 rounded-lg bg-brand-500/20 flex items-center justify-center text-brand-400">
-              <ShieldCheck className="w-3.5 h-3.5" />
+              <GitPullRequest className="w-3.5 h-3.5" />
             </div>
             <span className="font-bold text-slate-300">CodeRefactor AI</span>
           </div>

@@ -147,6 +147,8 @@ def sync_repository_prs(repo_id: int, db: Session = Depends(get_db)) -> Dict[str
     import httpx
     from app.services.orchestrator import ReviewOrchestrator
 
+    from app.core.config import settings
+
     repo = db.query(Repository).filter(Repository.id == repo_id).first()
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
@@ -156,7 +158,7 @@ def sync_repository_prs(repo_id: int, db: Session = Depends(get_db)) -> Dict[str
         repo_owner = db.query(User).filter(User.id == repo.user_id).first()
         if repo_owner and repo_owner.github_access_token:
             token = repo_owner.github_access_token
-    token = token or os.getenv("GITHUB_TOKEN")
+    token = token or settings.GITHUB_TOKEN
 
     headers = {
         "Accept": "application/vnd.github.v3+json",
@@ -168,9 +170,15 @@ def sync_repository_prs(repo_id: int, db: Session = Depends(get_db)) -> Dict[str
     try:
         with httpx.Client(timeout=15.0) as client:
             resp = client.get(f"https://api.github.com/repos/{repo.full_name}/pulls?state=open", headers=headers)
+            # If user-specific token expired or lacks permission, fall back to system GITHUB_TOKEN
+            if resp.status_code == 401 and settings.GITHUB_TOKEN and token != settings.GITHUB_TOKEN:
+                headers["Authorization"] = f"Bearer {settings.GITHUB_TOKEN}"
+                resp = client.get(f"https://api.github.com/repos/{repo.full_name}/pulls?state=open", headers=headers)
             if resp.status_code != 200:
                 raise HTTPException(status_code=resp.status_code, detail=f"GitHub API error: {resp.text}")
             prs_data = resp.json()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch PRs from GitHub: {str(e)}")
 
