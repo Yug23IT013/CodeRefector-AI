@@ -285,6 +285,13 @@ pytest backend/tests/test_webhook_security.py -v
 
 ---
 
+## Contributors
+
+- [Yug Buha](https://github.com/Yug23IT013)
+- [Dev Dadhania](https://github.com/dev11062004)
+
+---
+
 ## License
 
 MIT License. Built for modern software engineering teams.

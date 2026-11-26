@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   GitPullRequest,
   FolderGit2,
-  ShieldCheck,
   BrainCircuit,
   Cpu,
   Plus,
